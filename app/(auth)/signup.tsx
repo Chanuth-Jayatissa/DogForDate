@@ -8,43 +8,52 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { theme, globalStyles } from '@/constants/Theme';
 import Button from '@/components/Button';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  const { signUp } = useAuth();
   const router = useRouter();
   
-  const handleSignup = () => {
+  const handleSignup = async () => {
     // Basic validation
     if (!name || !email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
     
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
     
     setLoading(true);
-    setError('');
     
-    // Simulating API call
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await signUp(email, password, name);
       // Navigate to role selection
       router.push('/role-select');
-    }, 1500);
+    } catch (error: any) {
+      Alert.alert('Signup Failed', error.message || 'An error occurred during signup');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,8 +77,6 @@ export default function SignupScreen() {
 
         <View style={styles.formContainer}>
           <Text style={styles.title}>Create Account</Text>
-          
-          {error ? <Text style={globalStyles.error}>{error}</Text> : null}
           
           <View style={globalStyles.inputContainer}>
             <Text style={styles.label}>Full Name</Text>

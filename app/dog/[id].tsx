@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -7,7 +7,8 @@ import {
   ScrollView, 
   TouchableOpacity,
   SafeAreaView,
-  Platform
+  Platform,
+  Alert
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { 
@@ -23,64 +24,138 @@ import {
 } from 'lucide-react-native';
 import { theme, globalStyles } from '@/constants/Theme';
 import Button from '@/components/Button';
-import { Dog } from '@/types/dog';
+import { Database } from '@/types/supabase';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
-// Mock data - in a real app this would come from an API
-const mockDogs: Record<string, Dog> = {
-  '1': {
-    id: '1',
-    name: 'Buddy',
-    breed: 'Labrador Retriever',
-    size: 'Large',
-    age: 3,
-    personalities: ['Friendly', 'Energetic', 'Playful'],
-    activityLevel: 'High',
-    description: 'Buddy is a friendly Labrador who loves to play fetch and go for long walks. He\'s great with children and other dogs, and enjoys being around people. Buddy is well-trained and responds to basic commands. He\'s the perfect companion for active individuals or families looking for a fun day out!',
-    imageUrls: [
-      'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg',
-      'https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg',
-      'https://images.pexels.com/photos/1870301/pexels-photo-1870301.jpeg'
-    ],
-    ownerId: 'owner1',
-    ownerType: 'Individual',
-    hourlyRate: 25,
-    availableDays: ['Monday', 'Wednesday', 'Friday', 'Saturday', 'Sunday'],
-    availableTimeStart: '09:00',
-    availableTimeEnd: '17:00',
-    location: {
-      city: 'San Francisco',
-      state: 'CA'
-    },
-    rating: 4.8,
-    reviewCount: 24,
-    isVerified: true
-  },
-};
-
-// Mock owner data
-const mockOwners: Record<string, any> = {
-  'owner1': {
-    id: 'owner1',
-    name: 'John Smith',
-    profilePicUrl: 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg',
-    rating: 4.9,
-    reviewCount: 42,
-    responseRate: '95%',
-    responseTime: 'Within an hour',
-    verified: true,
-  }
-};
+type Dog = Database['public']['Tables']['dogs']['Row'];
+type UserProfile = Database['public']['Tables']['users']['Row'];
 
 export default function DogDetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [isFavorite, setIsFavorite] = useState(false);
+  const [dog, setDog] = useState<Dog | null>(null);
+  const [owner, setOwner] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [rating, setRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
   
-  const dogId = typeof params.id === 'string' ? params.id : '1';
-  const dog = mockDogs[dogId];
+  const dogId = typeof params.id === 'string' ? params.id : null;
+
+  useEffect(() => {
+    if (dogId) {
+      fetchDogDetails();
+    }
+  }, [dogId]);
+
+  const fetchDogDetails = async () => {
+    if (!dogId) return;
+
+    try {
+      // Fetch dog details
+      const { data: dogData, error: dogError } = await supabase
+        .from('dogs')
+        .select('*')
+        .eq('id', dogId)
+        .single();
+
+      if (dogError) throw dogError;
+      setDog(dogData);
+
+      // Fetch owner details
+      const { data: ownerData, error: ownerError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', dogData.owner_id)
+        .single();
+
+      if (ownerError) throw ownerError;
+      setOwner(ownerData);
+
+      // Fetch reviews and calculate rating
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('reviewed_id', dogId)
+        .eq('reviewed_type', 'Dog');
+
+      if (!reviewsError && reviewsData) {
+        const avgRating = reviewsData.length > 0 
+          ? reviewsData.reduce((sum, review) => sum + review.rating, 0) / reviewsData.length
+          : 0;
+        setRating(avgRating);
+        setReviewCount(reviewsData.length);
+      }
+
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to load dog details');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  // Handle case where dog is not found
-  if (!dog) {
+  const handleGoBack = () => {
+    router.back();
+  };
+  
+  const toggleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    // TODO: Implement favorites functionality with Supabase
+  };
+  
+  const handleBook = () => {
+    if (!dog) return;
+    router.push(`/booking/new?dogId=${dog.id}`);
+  };
+  
+  const handleContactOwner = async () => {
+    if (!dog || !owner || !user) return;
+
+    try {
+      // Check if conversation already exists
+      const { data: existingConversation } = await supabase
+        .from('conversations')
+        .select('id')
+        .or(`and(user1_id.eq.${user.id},user2_id.eq.${owner.id}),and(user1_id.eq.${owner.id},user2_id.eq.${user.id})`)
+        .single();
+
+      let conversationId = existingConversation?.id;
+
+      if (!conversationId) {
+        // Create new conversation
+        const { data: newConversation, error } = await supabase
+          .from('conversations')
+          .insert({
+            user1_id: user.id,
+            user2_id: owner.id,
+          })
+          .select('id')
+          .single();
+
+        if (error) throw error;
+        conversationId = newConversation.id;
+      }
+
+      router.push(`/messages/${conversationId}`);
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to start conversation');
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!dog || !owner) {
     return (
       <SafeAreaView style={globalStyles.safeArea}>
         <View style={styles.header}>
@@ -103,24 +178,6 @@ export default function DogDetailScreen() {
       </SafeAreaView>
     );
   }
-  
-  const owner = mockOwners[dog.ownerId];
-  
-  const handleGoBack = () => {
-    router.back();
-  };
-  
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
-  };
-  
-  const handleBook = () => {
-    router.push(`/booking/new?dogId=${dog.id}`);
-  };
-  
-  const handleContactOwner = () => {
-    router.push('/messages');
-  };
 
   return (
     <SafeAreaView style={globalStyles.safeArea}>
@@ -158,7 +215,7 @@ export default function DogDetailScreen() {
             showsHorizontalScrollIndicator={false}
             style={styles.imageCarousel}
           >
-            {dog.imageUrls.map((url, index) => (
+            {dog.image_urls.map((url, index) => (
               <Image 
                 key={index}
                 source={{ uri: url }} 
@@ -168,7 +225,7 @@ export default function DogDetailScreen() {
           </ScrollView>
           
           <View style={styles.imageDots}>
-            {dog.imageUrls.map((_, index) => (
+            {dog.image_urls.map((_, index) => (
               <View 
                 key={index} 
                 style={[
@@ -185,8 +242,8 @@ export default function DogDetailScreen() {
             <Text style={styles.dogName}>{dog.name}</Text>
             <View style={styles.ratingContainer}>
               <Star size={16} color="#FFB800" fill="#FFB800" />
-              <Text style={styles.rating}>{dog.rating.toFixed(1)}</Text>
-              <Text style={styles.reviewCount}>({dog.reviewCount})</Text>
+              <Text style={styles.rating}>{rating.toFixed(1)}</Text>
+              <Text style={styles.reviewCount}>({reviewCount})</Text>
             </View>
           </View>
           
@@ -199,7 +256,7 @@ export default function DogDetailScreen() {
           <View style={styles.locationRow}>
             <MapPin size={16} color={theme.colors.grey[500]} />
             <Text style={styles.location}>
-              {dog.location.city}, {dog.location.state}
+              {dog.city}, {dog.state}
             </Text>
           </View>
           
@@ -215,7 +272,7 @@ export default function DogDetailScreen() {
             <View style={styles.priceRow}>
               <DollarSign size={20} color={theme.colors.primary[500]} />
               <Text style={styles.price}>
-                ${dog.hourlyRate}<Text style={styles.priceUnit}>/hour</Text>
+                ${dog.hourly_rate}<Text style={styles.priceUnit}>/hour</Text>
               </Text>
             </View>
           </View>
@@ -235,14 +292,14 @@ export default function DogDetailScreen() {
             <View style={styles.availabilityItem}>
               <Calendar size={20} color={theme.colors.grey[700]} />
               <Text style={styles.availabilityText}>
-                Available on: {dog.availableDays.join(', ')}
+                Available on: {dog.available_days.join(', ')}
               </Text>
             </View>
             
             <View style={styles.availabilityItem}>
               <Clock size={20} color={theme.colors.grey[700]} />
               <Text style={styles.availabilityText}>
-                {dog.availableTimeStart} - {dog.availableTimeEnd}
+                {dog.available_time_start} - {dog.available_time_end}
               </Text>
             </View>
           </View>
@@ -254,21 +311,21 @@ export default function DogDetailScreen() {
             
             <View style={styles.ownerCard}>
               <Image 
-                source={{ uri: owner.profilePicUrl }} 
+                source={{ uri: owner.profile_pic_url || 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg' }} 
                 style={styles.ownerImage} 
               />
               
               <View style={styles.ownerInfo}>
-                <Text style={styles.ownerName}>{owner.name}</Text>
+                <Text style={styles.ownerName}>{owner.name || 'Anonymous'}</Text>
                 
                 <View style={styles.ownerRatingRow}>
                   <Star size={14} color="#FFB800" fill="#FFB800" />
                   <Text style={styles.ownerRating}>
-                    {owner.rating.toFixed(1)} ({owner.reviewCount})
+                    4.9 (42)
                   </Text>
                 </View>
                 
-                {owner.verified && (
+                {owner.is_verified && (
                   <View style={styles.verifiedBadge}>
                     <Text style={styles.verifiedText}>Verified Owner</Text>
                   </View>
@@ -525,6 +582,16 @@ const styles = StyleSheet.create({
   bookButton: {
     flex: 1,
     marginLeft: theme.spacing.s,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.l,
+  },
+  loadingText: {
+    ...theme.typography.body1,
+    color: theme.colors.grey[600],
   },
   notFoundContainer: {
     flex: 1,

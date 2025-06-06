@@ -7,29 +7,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
-  SafeAreaView
+  SafeAreaView,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Heart, Bell, Shield, CreditCard, CircleHelp as HelpCircle, LogOut, ChevronRight, Star } from 'lucide-react-native';
+import { Heart, Bell, Shield, CreditCard, CircleHelp as HelpCircle, LogOut, ChevronRight, Star, Plus } from 'lucide-react-native';
 import { theme, globalStyles } from '@/constants/Theme';
 import Button from '@/components/Button';
-
-// Mock user data
-const mockUser = {
-  id: 'user1',
-  name: 'Alex Johnson',
-  email: 'alex@example.com',
-  role: 'Renter',
-  profilePicUrl: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg',
-  bio: 'Dog lover and outdoor enthusiast. I enjoy taking dogs on hikes and to the park!',
-  location: {
-    city: 'San Francisco',
-    state: 'CA'
-  },
-  rating: 4.8,
-  reviewCount: 12,
-  isVerified: true
-};
+import { useAuth } from '@/hooks/useAuth';
 
 interface SettingItemProps {
   icon: React.ReactNode;
@@ -61,14 +46,53 @@ function SettingItem({
 }
 
 export default function ProfileScreen() {
-  const [datingEnabled, setDatingEnabled] = useState(false);
+  const { user, profile, signOut, updateProfile } = useAuth();
+  const [datingEnabled, setDatingEnabled] = useState(profile?.dating_enabled || false);
   const router = useRouter();
   
-  const handleLogout = () => {
-    // Navigate to login screen
-    router.replace('/login');
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace('/login');
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to sign out');
+    }
+  };
+
+  const handleDatingToggle = async (value: boolean) => {
+    try {
+      await updateProfile({ dating_enabled: value });
+      setDatingEnabled(value);
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to update dating preference');
+    }
+  };
+
+  const handleEditProfile = () => {
+    // TODO: Navigate to edit profile screen
+    Alert.alert('Coming Soon', 'Profile editing will be available soon!');
+  };
+
+  const handleMyDogs = () => {
+    // TODO: Navigate to my dogs screen
+    Alert.alert('Coming Soon', 'Dog management will be available soon!');
+  };
+
+  const handleAddDog = () => {
+    // TODO: Navigate to add dog screen
+    Alert.alert('Coming Soon', 'Add dog functionality will be available soon!');
   };
   
+  if (!profile) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={globalStyles.safeArea}>
       <ScrollView 
@@ -79,19 +103,26 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           <View style={styles.profileInfo}>
             <Image 
-              source={{ uri: mockUser.profilePicUrl }} 
+              source={{ 
+                uri: profile.profile_pic_url || 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg' 
+              }} 
               style={styles.profileImage} 
             />
             <View style={styles.profileText}>
-              <Text style={styles.name}>{mockUser.name}</Text>
-              <Text style={styles.location}>
-                {mockUser.location.city}, {mockUser.location.state}
-              </Text>
+              <Text style={styles.name}>{profile.name || 'Anonymous'}</Text>
+              <Text style={styles.email}>{profile.email}</Text>
+              <Text style={styles.role}>{profile.role}</Text>
+              
+              {profile.city && profile.state && (
+                <Text style={styles.location}>
+                  {profile.city}, {profile.state}
+                </Text>
+              )}
               
               <View style={styles.ratingContainer}>
                 <Star size={16} color="#FFB800" fill="#FFB800" />
-                <Text style={styles.rating}>{mockUser.rating.toFixed(1)}</Text>
-                <Text style={styles.reviewCount}>({mockUser.reviewCount} reviews)</Text>
+                <Text style={styles.rating}>4.8</Text>
+                <Text style={styles.reviewCount}>(12 reviews)</Text>
               </View>
             </View>
           </View>
@@ -100,14 +131,38 @@ export default function ProfileScreen() {
             title="Edit Profile" 
             variant="outline" 
             size="small"
-            onPress={() => {}}
+            onPress={handleEditProfile}
             style={styles.editButton}
           />
         </View>
         
-        <View style={styles.bioSection}>
-          <Text style={styles.bioText}>{mockUser.bio}</Text>
-        </View>
+        {profile.bio && (
+          <View style={styles.bioSection}>
+            <Text style={styles.bioText}>{profile.bio}</Text>
+          </View>
+        )}
+
+        {profile.role === 'Owner' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Dogs</Text>
+            
+            <View style={styles.settingsList}>
+              <SettingItem 
+                icon={<Plus size={24} color={theme.colors.primary[500]} />} 
+                title="Add New Dog" 
+                subtitle="List a new dog for rent"
+                onPress={handleAddDog}
+              />
+              
+              <SettingItem 
+                icon={<Heart size={24} color={theme.colors.secondary[500]} />} 
+                title="Manage My Dogs" 
+                subtitle="View and edit your dog listings"
+                onPress={handleMyDogs}
+              />
+            </View>
+          </View>
+        )}
         
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Settings</Text>
@@ -117,28 +172,28 @@ export default function ProfileScreen() {
               icon={<Heart size={24} color={theme.colors.primary[500]} />} 
               title="Favorites" 
               subtitle="View your favorite dogs"
-              onPress={() => {}}
+              onPress={() => Alert.alert('Coming Soon', 'Favorites will be available soon!')}
             />
             
             <SettingItem 
               icon={<Bell size={24} color={theme.colors.secondary[500]} />} 
               title="Notifications" 
               subtitle="Manage your notification preferences"
-              onPress={() => {}}
+              onPress={() => Alert.alert('Coming Soon', 'Notification settings will be available soon!')}
             />
             
             <SettingItem 
               icon={<Shield size={24} color={theme.colors.success[500]} />} 
               title="Privacy & Security" 
               subtitle="Update your privacy settings"
-              onPress={() => {}}
+              onPress={() => Alert.alert('Coming Soon', 'Privacy settings will be available soon!')}
             />
             
             <SettingItem 
               icon={<CreditCard size={24} color={theme.colors.accent[500]} />} 
               title="Payment Methods" 
               subtitle="Manage your payment options"
-              onPress={() => {}}
+              onPress={() => Alert.alert('Coming Soon', 'Payment methods will be available soon!')}
             />
           </View>
         </View>
@@ -154,7 +209,7 @@ export default function ProfileScreen() {
               rightElement={
                 <Switch 
                   value={datingEnabled}
-                  onValueChange={setDatingEnabled}
+                  onValueChange={handleDatingToggle}
                   trackColor={{ 
                     false: theme.colors.grey[300], 
                     true: theme.colors.primary[500] 
@@ -163,7 +218,7 @@ export default function ProfileScreen() {
                   ios_backgroundColor={theme.colors.grey[300]}
                 />
               }
-              onPress={() => setDatingEnabled(!datingEnabled)}
+              onPress={() => handleDatingToggle(!datingEnabled)}
             />
           </View>
         </View>
@@ -204,6 +259,17 @@ const styles = StyleSheet.create({
   name: {
     ...theme.typography.h3,
     marginBottom: 2,
+  },
+  email: {
+    ...theme.typography.body2,
+    color: theme.colors.grey[600],
+    marginBottom: 2,
+  },
+  role: {
+    ...theme.typography.caption,
+    color: theme.colors.primary[500],
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 4,
   },
   location: {
     ...theme.typography.body2,
@@ -284,5 +350,14 @@ const styles = StyleSheet.create({
     ...theme.typography.button,
     color: theme.colors.error[500],
     marginLeft: theme.spacing.s,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...theme.typography.body1,
+    color: theme.colors.grey[600],
   },
 });

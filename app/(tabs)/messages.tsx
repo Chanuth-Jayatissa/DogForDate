@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -6,122 +6,152 @@ import {
   TouchableOpacity, 
   FlatList,
   Image,
-  SafeAreaView
+  SafeAreaView,
+  Alert
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { theme, globalStyles } from '@/constants/Theme';
 import { format, parseISO } from 'date-fns';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
+import { Database } from '@/types/supabase';
 
-// Message interface
-interface Message {
-  id: string;
-  conversationId: string;
-  senderId: string;
-  receiverId: string;
-  content: string;
-  timestamp: string;
-  read: boolean;
-}
+type Conversation = Database['public']['Tables']['conversations']['Row'];
+type Message = Database['public']['Tables']['messages']['Row'];
+type UserProfile = Database['public']['Tables']['users']['Row'];
 
-// Conversation interface
-interface Conversation {
-  id: string;
-  participants: {
-    id: string;
-    name: string;
-    avatar: string;
-  }[];
-  lastMessage: Message;
+interface ConversationWithDetails extends Conversation {
+  otherUser: UserProfile;
+  lastMessage: Message | null;
   unreadCount: number;
 }
 
-// Mock conversations data
-const mockConversations: Conversation[] = [
-  {
-    id: '1',
-    participants: [
-      {
-        id: 'owner1',
-        name: 'John Smith',
-        avatar: 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg',
-      }
-    ],
-    lastMessage: {
-      id: 'm1',
-      conversationId: '1',
-      senderId: 'owner1',
-      receiverId: 'renter1',
-      content: 'Buddy is excited to meet you tomorrow!',
-      timestamp: '2025-05-19T14:30:00Z',
-      read: false,
-    },
-    unreadCount: 2,
-  },
-  {
-    id: '2',
-    participants: [
-      {
-        id: 'owner2',
-        name: 'Emily Johnson',
-        avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg',
-      }
-    ],
-    lastMessage: {
-      id: 'm2',
-      conversationId: '2',
-      senderId: 'renter1',
-      receiverId: 'owner2',
-      content: 'What time should I pick Luna up?',
-      timestamp: '2025-05-18T09:15:00Z',
-      read: true,
-    },
-    unreadCount: 0,
-  },
-  {
-    id: '3',
-    participants: [
-      {
-        id: 'owner3',
-        name: 'Paws Shelter',
-        avatar: 'https://images.pexels.com/photos/1612846/pexels-photo-1612846.jpeg',
-      }
-    ],
-    lastMessage: {
-      id: 'm3',
-      conversationId: '3',
-      senderId: 'owner3',
-      receiverId: 'renter1',
-      content: 'Max loves the park by 5th Avenue. You should take him there!',
-      timestamp: '2025-05-17T16:45:00Z',
-      read: true,
-    },
-    unreadCount: 0,
-  },
-];
-
-function formatTimestamp(timestamp: string) {
-  const date = parseISO(timestamp);
-  const now = new Date();
-  
-  // Today
-  if (
-    date.getDate() === now.getDate() &&
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear()
-  ) {
-    return format(date, 'h:mm a');
-  }
-  
-  // This week
-  const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffInDays < 7) {
-    return format(date, 'EEE');
-  }
-  
-  // Older
-  return format(date, 'MMM d');
-}
-
 export default function MessagesScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [conversations, setConversations] = useState<ConversationWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchConversations();
+      
+      // Subscribe to real-time updates
+      const subscription = supabase
+        .channel('messages')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'messages' }, 
+          () => {
+            fetchConversations();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [user]);
+
+  const fetchConversations = async () => {
+    if (!user) return;
+
+    try {
+      // Fetch conversations where user is a participant
+      const { data: conversationsData, error: conversationsError } = await supabase
+        .from('conversations')
+        .select('*')
+        .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+        .order('updated_at', { ascending: false });
+
+      if (conversationsError) throw conversationsError;
+
+      const conversationsWithDetails: ConversationWithDetails[] = [];
+
+      for (const conversation of conversationsData || []) {
+        // Get the other user
+        const otherUserId = conversation.user1_id === user.id 
+          ? conversation.user2_id 
+          : conversation.user1_id;
+
+        const { data: otherUser } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', otherUserId)
+          .single();
+
+        // Get last message
+        const { data: lastMessage } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversation.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        // Get unread count
+        const { count: unreadCount } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('conversation_id', conversation.id)
+          .eq('is_read', false)
+          .neq('sender_id', user.id);
+
+        if (otherUser) {
+          conversationsWithDetails.push({
+            ...conversation,
+            otherUser,
+            lastMessage,
+            unreadCount: unreadCount || 0,
+          });
+        }
+      }
+
+      setConversations(conversationsWithDetails);
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to load conversations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = parseISO(timestamp);
+    const now = new Date();
+    
+    // Today
+    if (
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear()
+    ) {
+      return format(date, 'h:mm a');
+    }
+    
+    // This week
+    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffInDays < 7) {
+      return format(date, 'EEE');
+    }
+    
+    // Older
+    return format(date, 'MMM d');
+  };
+
+  const handleConversationPress = (conversation: ConversationWithDetails) => {
+    router.push(`/messages/${conversation.id}`);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading messages...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={globalStyles.safeArea}>
       <View style={styles.header}>
@@ -129,45 +159,52 @@ export default function MessagesScreen() {
       </View>
       
       <FlatList
-        data={mockConversations}
+        data={conversations}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const participant = item.participants[0];
-          
-          return (
-            <TouchableOpacity style={styles.conversationItem} activeOpacity={0.7}>
-              <Image source={{ uri: participant.avatar }} style={styles.avatar} />
-              
-              <View style={styles.conversationContent}>
-                <View style={styles.conversationHeader}>
-                  <Text style={styles.name}>{participant.name}</Text>
+        renderItem={({ item }) => (
+          <TouchableOpacity 
+            style={styles.conversationItem} 
+            onPress={() => handleConversationPress(item)}
+            activeOpacity={0.7}
+          >
+            <Image 
+              source={{ 
+                uri: item.otherUser.profile_pic_url || 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg' 
+              }} 
+              style={styles.avatar} 
+            />
+            
+            <View style={styles.conversationContent}>
+              <View style={styles.conversationHeader}>
+                <Text style={styles.name}>{item.otherUser.name || 'Anonymous'}</Text>
+                {item.lastMessage && (
                   <Text style={styles.timestamp}>
-                    {formatTimestamp(item.lastMessage.timestamp)}
+                    {formatTimestamp(item.lastMessage.created_at)}
                   </Text>
-                </View>
-                
-                <View style={styles.messageRow}>
-                  <Text 
-                    style={[
-                      styles.message, 
-                      item.unreadCount > 0 && styles.unreadMessage
-                    ]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {item.lastMessage.content}
-                  </Text>
-                  
-                  {item.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
-                    </View>
-                  )}
-                </View>
+                )}
               </View>
-            </TouchableOpacity>
-          );
-        }}
+              
+              <View style={styles.messageRow}>
+                <Text 
+                  style={[
+                    styles.message, 
+                    item.unreadCount > 0 && styles.unreadMessage
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {item.lastMessage?.content || 'No messages yet'}
+                </Text>
+                
+                {item.unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
         contentContainerStyle={styles.conversationsList}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -191,6 +228,15 @@ const styles = StyleSheet.create({
   title: {
     ...theme.typography.h2,
     color: theme.colors.text,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...theme.typography.body1,
+    color: theme.colors.grey[600],
   },
   conversationsList: {
     padding: theme.spacing.l,

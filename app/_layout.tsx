@@ -6,9 +6,43 @@ import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { SplashScreen } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
+import { useRouter, useSegments } from 'expo-router';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
+
+function RootLayoutNav() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!user && !inAuthGroup) {
+      // Redirect to login if not authenticated
+      router.replace('/login');
+    } else if (user && inAuthGroup) {
+      // Redirect to main app if authenticated
+      router.replace('/(tabs)');
+    }
+  }, [user, loading, segments]);
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="dog/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="booking/new" options={{ headerShown: false }} />
+      <Stack.Screen name="messages/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -35,13 +69,7 @@ export default function RootLayout() {
 
   return (
     <>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="dog/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="booking/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
+      <RootLayoutNav />
       <StatusBar style="dark" />
     </>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -8,160 +8,16 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { Search, SlidersHorizontal, X } from 'lucide-react-native';
 import DogCard from '@/components/DogCard';
 import { theme, globalStyles } from '@/constants/Theme';
-import { Dog } from '@/types/dog';
+import { useDogs } from '@/hooks/useDogs';
+import { Database } from '@/types/supabase';
 
-// Mock data for dogs
-const mockDogs: Dog[] = [
-  {
-    id: '1',
-    name: 'Buddy',
-    breed: 'Labrador Retriever',
-    size: 'Large',
-    age: 3,
-    personalities: ['Friendly', 'Energetic', 'Playful'],
-    activityLevel: 'High',
-    description: 'Buddy is a friendly Labrador who loves to play fetch and go for long walks.',
-    imageUrls: ['https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg'],
-    ownerId: 'owner1',
-    ownerType: 'Individual',
-    hourlyRate: 25,
-    availableDays: ['Monday', 'Wednesday', 'Friday', 'Saturday', 'Sunday'],
-    availableTimeStart: '09:00',
-    availableTimeEnd: '17:00',
-    location: {
-      city: 'San Francisco',
-      state: 'CA'
-    },
-    rating: 4.8,
-    reviewCount: 24,
-    isVerified: true
-  },
-  {
-    id: '2',
-    name: 'Luna',
-    breed: 'French Bulldog',
-    size: 'Small',
-    age: 2,
-    personalities: ['Calm', 'Affectionate', 'Shy'],
-    activityLevel: 'Low',
-    description: 'Luna is a sweet French Bulldog who enjoys cuddles and short walks.',
-    imageUrls: ['https://images.pexels.com/photos/4587971/pexels-photo-4587971.jpeg'],
-    ownerId: 'owner2',
-    ownerType: 'Individual',
-    hourlyRate: 30,
-    availableDays: ['Tuesday', 'Thursday', 'Saturday', 'Sunday'],
-    availableTimeStart: '10:00',
-    availableTimeEnd: '16:00',
-    location: {
-      city: 'Los Angeles',
-      state: 'CA'
-    },
-    rating: 4.6,
-    reviewCount: 15,
-    isVerified: true
-  },
-  {
-    id: '3',
-    name: 'Max',
-    breed: 'German Shepherd',
-    size: 'Large',
-    age: 4,
-    personalities: ['Protective', 'Energetic', 'Social'],
-    activityLevel: 'High',
-    description: 'Max is a well-trained German Shepherd who loves to run and play.',
-    imageUrls: ['https://images.pexels.com/photos/1805164/pexels-photo-1805164.jpeg'],
-    ownerId: 'owner3',
-    ownerType: 'Shelter',
-    hourlyRate: 20,
-    availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-    availableTimeStart: '08:00',
-    availableTimeEnd: '18:00',
-    location: {
-      city: 'New York',
-      state: 'NY'
-    },
-    rating: 4.9,
-    reviewCount: 32,
-    isVerified: true
-  },
-  {
-    id: '4',
-    name: 'Daisy',
-    breed: 'Beagle',
-    size: 'Medium',
-    age: 2,
-    personalities: ['Playful', 'Energetic', 'Friendly'],
-    activityLevel: 'Medium',
-    description: 'Daisy is a curious Beagle who loves to explore and play with toys.',
-    imageUrls: ['https://images.pexels.com/photos/1254140/pexels-photo-1254140.jpeg'],
-    ownerId: 'owner4',
-    ownerType: 'Individual',
-    hourlyRate: 22,
-    availableDays: ['Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    availableTimeStart: '10:00',
-    availableTimeEnd: '16:00',
-    location: {
-      city: 'Chicago',
-      state: 'IL'
-    },
-    rating: 4.5,
-    reviewCount: 18,
-    isVerified: false
-  },
-  {
-    id: '5',
-    name: 'Charlie',
-    breed: 'Golden Retriever',
-    size: 'Large',
-    age: 5,
-    personalities: ['Calm', 'Friendly', 'Affectionate'],
-    activityLevel: 'Medium',
-    description: 'Charlie is a gentle Golden Retriever who loves people and other dogs.',
-    imageUrls: ['https://images.pexels.com/photos/2253275/pexels-photo-2253275.jpeg'],
-    ownerId: 'owner5',
-    ownerType: 'Individual',
-    hourlyRate: 28,
-    availableDays: ['Monday', 'Tuesday', 'Saturday', 'Sunday'],
-    availableTimeStart: '09:00',
-    availableTimeEnd: '17:00',
-    location: {
-      city: 'Seattle',
-      state: 'WA'
-    },
-    rating: 4.7,
-    reviewCount: 29,
-    isVerified: true
-  },
-  {
-    id: '6',
-    name: 'Bella',
-    breed: 'Poodle',
-    size: 'Medium',
-    age: 3,
-    personalities: ['Social', 'Playful', 'Affectionate'],
-    activityLevel: 'Medium',
-    description: 'Bella is a smart Poodle who loves to learn tricks and play.',
-    imageUrls: ['https://images.pexels.com/photos/5731812/pexels-photo-5731812.jpeg'],
-    ownerId: 'owner6',
-    ownerType: 'Shelter',
-    hourlyRate: 24,
-    availableDays: ['Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-    availableTimeStart: '10:00',
-    availableTimeEnd: '15:00',
-    location: {
-      city: 'Boston',
-      state: 'MA'
-    },
-    rating: 4.4,
-    reviewCount: 12,
-    isVerified: false
-  }
-];
+type Dog = Database['public']['Tables']['dogs']['Row'];
 
 // Filter options
 type FilterOptions = {
@@ -178,8 +34,15 @@ export default function DiscoverScreen() {
   const [filters, setFilters] = useState<FilterOptions>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   
+  const { dogs, loading, error } = useDogs();
   const { width } = Dimensions.get('window');
   const isTabletOrDesktop = width >= 768;
+  
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Error', error);
+    }
+  }, [error]);
   
   const toggleFavorite = (id: string) => {
     if (favorites.includes(id)) {
@@ -210,14 +73,14 @@ export default function DiscoverScreen() {
     setFilters({});
   };
   
-  const filteredDogs = mockDogs.filter(dog => {
+  const filteredDogs = dogs.filter(dog => {
     // Search query filtering
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       if (
         !dog.name.toLowerCase().includes(query) &&
         !dog.breed.toLowerCase().includes(query) &&
-        !dog.location.city.toLowerCase().includes(query)
+        !dog.city.toLowerCase().includes(query)
       ) {
         return false;
       }
@@ -236,15 +99,15 @@ export default function DiscoverScreen() {
     }
     
     // Activity level filtering
-    if (filters.activityLevel && filters.activityLevel.length > 0 && !filters.activityLevel.includes(dog.activityLevel)) {
+    if (filters.activityLevel && filters.activityLevel.length > 0 && !filters.activityLevel.includes(dog.activity_level)) {
       return false;
     }
     
     // Price range filtering
-    if (filters.minRate && dog.hourlyRate < filters.minRate) {
+    if (filters.minRate && dog.hourly_rate < filters.minRate) {
       return false;
     }
-    if (filters.maxRate && dog.hourlyRate > filters.maxRate) {
+    if (filters.maxRate && dog.hourly_rate > filters.maxRate) {
       return false;
     }
     
@@ -263,6 +126,16 @@ export default function DiscoverScreen() {
       </Text>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading dogs...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={globalStyles.safeArea}>
@@ -460,6 +333,15 @@ const styles = StyleSheet.create({
   },
   dogsGrid: {
     padding: theme.spacing.s,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...theme.typography.body1,
+    color: theme.colors.grey[600],
   },
   emptyState: {
     padding: theme.spacing.xl,

@@ -3,7 +3,9 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, Dimensions } from 'rea
 import { useRouter } from 'expo-router';
 import { Heart, MapPin, Star } from 'lucide-react-native';
 import { theme, globalStyles } from '@/constants/Theme';
-import { Dog } from '@/types/dog';
+import { Database } from '@/types/supabase';
+
+type Dog = Database['public']['Tables']['dogs']['Row'];
 
 interface DogCardProps {
   dog: Dog;
@@ -27,6 +29,9 @@ export default function DogCard({ dog, onFavoriteToggle, isFavorite = false }: D
     }
   };
 
+  // Calculate rating from reviews (placeholder for now)
+  const rating = 4.5;
+
   return (
     <TouchableOpacity 
       style={[styles.card, { width: cardWidth }]} 
@@ -34,8 +39,8 @@ export default function DogCard({ dog, onFavoriteToggle, isFavorite = false }: D
       activeOpacity={0.95}
     >
       <View style={styles.imageContainer}>
-        <Image source={{ uri: dog.imageUrls[0] }} style={styles.image} />
-        {dog.isVerified && (
+        <Image source={{ uri: dog.image_urls[0] }} style={styles.image} />
+        {dog.is_verified && (
           <View style={styles.verifiedBadge}>
             <Text style={styles.verifiedText}>Verified</Text>
           </View>
@@ -59,7 +64,7 @@ export default function DogCard({ dog, onFavoriteToggle, isFavorite = false }: D
           <Text style={styles.name}>{dog.name}</Text>
           <View style={styles.ratingContainer}>
             <Star size={14} color="#FFB800" fill="#FFB800" />
-            <Text style={styles.rating}>{dog.rating.toFixed(1)}</Text>
+            <Text style={styles.rating}>{rating.toFixed(1)}</Text>
           </View>
         </View>
         
@@ -68,7 +73,7 @@ export default function DogCard({ dog, onFavoriteToggle, isFavorite = false }: D
         <View style={styles.locationContainer}>
           <MapPin size={14} color={theme.colors.grey[500]} />
           <Text style={styles.location}>
-            {dog.location.city}, {dog.location.state}
+            {dog.city}, {dog.state}
           </Text>
         </View>
         
@@ -86,7 +91,7 @@ export default function DogCard({ dog, onFavoriteToggle, isFavorite = false }: D
         </View>
         
         <View style={globalStyles.rowSpaceBetween}>
-          <Text style={styles.price}>${dog.hourlyRate}<Text style={styles.priceUnit}>/hour</Text></Text>
+          <Text style={styles.price}>${dog.hourly_rate}<Text style={styles.priceUnit}>/hour</Text></Text>
         </View>
       </View>
     </TouchableOpacity>

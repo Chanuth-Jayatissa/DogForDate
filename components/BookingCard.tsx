@@ -1,16 +1,14 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Calendar, Clock } from 'lucide-react-native';
 import { format, parseISO } from 'date-fns';
 import { theme, globalStyles } from '@/constants/Theme';
-import { Booking } from '@/types/booking';
+import { Database } from '@/types/supabase';
+import { supabase } from '@/lib/supabase';
 
-// Mock data for now - in a real app, would fetch dog info via dogId
-const mockDogInfo = {
-  name: 'Max',
-  imageUrl: 'https://images.pexels.com/photos/1805164/pexels-photo-1805164.jpeg',
-};
+type Booking = Database['public']['Tables']['bookings']['Row'];
+type Dog = Database['public']['Tables']['dogs']['Row'];
 
 interface BookingCardProps {
   booking: Booking;
@@ -18,6 +16,26 @@ interface BookingCardProps {
 
 export default function BookingCard({ booking }: BookingCardProps) {
   const router = useRouter();
+  const [dog, setDog] = useState<Dog | null>(null);
+  
+  useEffect(() => {
+    fetchDog();
+  }, [booking.dog_id]);
+
+  const fetchDog = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dogs')
+        .select('*')
+        .eq('id', booking.dog_id)
+        .single();
+
+      if (error) throw error;
+      setDog(data);
+    } catch (error) {
+      console.error('Error fetching dog:', error);
+    }
+  };
   
   const handlePress = () => {
     router.push(`/booking/${booking.id}`);
@@ -46,30 +64,44 @@ export default function BookingCard({ booking }: BookingCardProps) {
     return format(parseISO(dateString), 'h:mm a');
   };
 
+  if (!dog) {
+    return (
+      <View style={[styles.card, styles.loadingCard]}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.8}>
-      <View style={styles.header}>
-        <Text style={styles.dogName}>{mockDogInfo.name}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-          <Text style={styles.statusText}>{booking.status}</Text>
+      <View style={styles.cardContent}>
+        <Image source={{ uri: dog.image_urls[0] }} style={styles.dogImage} />
+        
+        <View style={styles.bookingInfo}>
+          <View style={styles.header}>
+            <Text style={styles.dogName}>{dog.name}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
+              <Text style={styles.statusText}>{booking.status}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Calendar size={16} color={theme.colors.grey[600]} />
+            <Text style={styles.infoText}>{formatDate(booking.start_time)}</Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Clock size={16} color={theme.colors.grey[600]} />
+            <Text style={styles.infoText}>
+              {formatTime(booking.start_time)} - {formatTime(booking.end_time)}
+            </Text>
+          </View>
+          
+          <View style={styles.footer}>
+            <Text style={styles.price}>${booking.total_amount.toFixed(2)}</Text>
+            <Text style={styles.paymentStatus}>{booking.payment_status}</Text>
+          </View>
         </View>
-      </View>
-      
-      <View style={styles.infoRow}>
-        <Calendar size={16} color={theme.colors.grey[600]} />
-        <Text style={styles.infoText}>{formatDate(booking.startTime)}</Text>
-      </View>
-      
-      <View style={styles.infoRow}>
-        <Clock size={16} color={theme.colors.grey[600]} />
-        <Text style={styles.infoText}>
-          {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
-        </Text>
-      </View>
-      
-      <View style={styles.footer}>
-        <Text style={styles.price}>${booking.totalAmount.toFixed(2)}</Text>
-        <Text style={styles.paymentStatus}>{booking.paymentStatus}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -79,6 +111,18 @@ const styles = StyleSheet.create({
   card: {
     ...globalStyles.card,
     marginBottom: theme.spacing.m,
+  },
+  cardContent: {
+    flexDirection: 'row',
+  },
+  dogImage: {
+    width: 80,
+    height: 80,
+    borderRadius: theme.borderRadius.m,
+    marginRight: theme.spacing.m,
+  },
+  bookingInfo: {
+    flex: 1,
   },
   header: {
     ...globalStyles.rowSpaceBetween,
@@ -121,5 +165,14 @@ const styles = StyleSheet.create({
   paymentStatus: {
     ...theme.typography.caption,
     color: theme.colors.grey[600],
+  },
+  loadingCard: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 100,
+  },
+  loadingText: {
+    ...theme.typography.body2,
+    color: theme.colors.grey[500],
   },
 });

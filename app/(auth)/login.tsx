@@ -8,36 +8,38 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { theme, globalStyles } from '@/constants/Theme';
 import Button from '@/components/Button';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  const { signIn } = useAuth();
   const router = useRouter();
   
-  const handleLogin = () => {
-    // Basic validation
+  const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please fill in all fields');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
     
     setLoading(true);
-    setError('');
     
-    // Simulating API call
-    setTimeout(() => {
+    try {
+      await signIn(email, password);
+      // Navigation will be handled by the auth state change in _layout.tsx
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message || 'An error occurred during login');
+    } finally {
       setLoading(false);
-      // For demo purposes, go to tabs
-      router.replace('/(tabs)');
-    }, 1500);
+    }
   };
 
   return (
@@ -61,8 +63,6 @@ export default function LoginScreen() {
 
         <View style={styles.formContainer}>
           <Text style={styles.title}>Welcome Back</Text>
-          
-          {error ? <Text style={globalStyles.error}>{error}</Text> : null}
           
           <View style={globalStyles.inputContainer}>
             <Text style={styles.label}>Email</Text>

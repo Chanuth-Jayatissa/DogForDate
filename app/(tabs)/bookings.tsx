@@ -1,82 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   View, 
   Text, 
   TouchableOpacity, 
   FlatList,
-  SafeAreaView
+  SafeAreaView,
+  Alert
 } from 'react-native';
 import { theme, globalStyles } from '@/constants/Theme';
-import { Booking, BookingStatus } from '@/types/booking';
+import { useBookings } from '@/hooks/useBookings';
 import BookingCard from '@/components/BookingCard';
+import { Database } from '@/types/supabase';
 
-// Mock bookings data
-const mockBookings: Booking[] = [
-  {
-    id: '1',
-    dogId: '1',
-    renterId: 'renter1',
-    ownerId: 'owner1',
-    startTime: '2025-05-20T10:00:00Z',
-    endTime: '2025-05-20T12:00:00Z',
-    status: 'Confirmed',
-    totalAmount: 50,
-    paymentStatus: 'Paid',
-    notes: 'Looking forward to meeting Buddy!',
-    createdAt: '2025-05-15T14:30:00Z',
-    updatedAt: '2025-05-15T14:30:00Z'
-  },
-  {
-    id: '2',
-    dogId: '3',
-    renterId: 'renter1',
-    ownerId: 'owner3',
-    startTime: '2025-05-22T14:00:00Z',
-    endTime: '2025-05-22T16:00:00Z',
-    status: 'Pending',
-    totalAmount: 40,
-    paymentStatus: 'Pending',
-    notes: 'Would love to take Max to the park.',
-    createdAt: '2025-05-16T09:15:00Z',
-    updatedAt: '2025-05-16T09:15:00Z'
-  },
-  {
-    id: '3',
-    dogId: '2',
-    renterId: 'renter1',
-    ownerId: 'owner2',
-    startTime: '2025-05-18T11:00:00Z',
-    endTime: '2025-05-18T13:00:00Z',
-    status: 'Completed',
-    totalAmount: 60,
-    paymentStatus: 'Paid',
-    notes: 'Had a great time with Luna!',
-    createdAt: '2025-05-12T10:30:00Z',
-    updatedAt: '2025-05-18T14:00:00Z'
-  },
-  {
-    id: '4',
-    dogId: '5',
-    renterId: 'renter1',
-    ownerId: 'owner5',
-    startTime: '2025-05-25T09:00:00Z',
-    endTime: '2025-05-25T11:00:00Z',
-    status: 'Cancelled',
-    totalAmount: 56,
-    paymentStatus: 'Refunded',
-    notes: 'Need to reschedule.',
-    createdAt: '2025-05-17T16:45:00Z',
-    updatedAt: '2025-05-19T08:30:00Z'
-  }
-];
-
+type BookingStatus = Database['public']['Tables']['bookings']['Row']['status'];
 type FilterTab = 'all' | BookingStatus;
 
 export default function BookingsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const { bookings, loading, error } = useBookings();
   
-  const filteredBookings = mockBookings.filter(booking => {
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Error', error);
+    }
+  }, [error]);
+  
+  const filteredBookings = bookings.filter(booking => {
     if (activeFilter === 'all') return true;
     return booking.status === activeFilter;
   });
@@ -96,6 +46,16 @@ export default function BookingsScreen() {
       </Text>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={globalStyles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading bookings...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={globalStyles.safeArea}>
@@ -169,6 +129,15 @@ const styles = StyleSheet.create({
   bookingsList: {
     padding: theme.spacing.l,
     paddingTop: 0,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...theme.typography.body1,
+    color: theme.colors.grey[600],
   },
   emptyState: {
     padding: theme.spacing.xl,

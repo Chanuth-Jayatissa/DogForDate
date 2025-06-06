@@ -5,12 +5,14 @@ import {
   Text, 
   TouchableOpacity, 
   Image,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { theme, globalStyles } from '@/constants/Theme';
 import Button from '@/components/Button';
 import { UserRole } from '@/types/user';
+import { useAuth } from '@/hooks/useAuth';
 
 interface RoleCardProps {
   title: string;
@@ -40,19 +42,23 @@ export default function RoleSelectScreen() {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(false);
   
+  const { updateProfile } = useAuth();
   const router = useRouter();
   
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!selectedRole) return;
     
     setLoading(true);
     
-    // Simulating API call
-    setTimeout(() => {
-      setLoading(false);
-      // Navigate to tabs
+    try {
+      await updateProfile({ role: selectedRole });
+      // Navigate to tabs - this will be handled by the auth state change
       router.replace('/(tabs)');
-    }, 1500);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update role');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
