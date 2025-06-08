@@ -6,7 +6,8 @@ import { Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google
 import { Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { SplashScreen } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router'
+import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +45,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  useFrameworkReady();
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
