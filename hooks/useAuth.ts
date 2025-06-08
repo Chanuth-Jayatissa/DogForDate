@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { Database } from '@/types/supabase';
@@ -10,10 +10,15 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mountedRef.current) return;
+      
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -27,6 +32,8 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mountedRef.current) return;
+      
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -37,7 +44,10 @@ export function useAuth() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -48,6 +58,8 @@ export function useAuth() {
         .eq('id', userId)
         .single();
 
+      if (!mountedRef.current) return;
+
       if (error) {
         console.error('Error fetching profile:', error);
       } else {
@@ -56,7 +68,9 @@ export function useAuth() {
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -110,7 +124,11 @@ export function useAuth() {
       .single();
 
     if (error) throw error;
-    setProfile(data);
+    
+    if (mountedRef.current) {
+      setProfile(data);
+    }
+    
     return data;
   };
 
